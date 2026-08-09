@@ -22,11 +22,18 @@ cad_reloj_en_s:  .asciz "\n   Reloj en segundos: "
 
 __start:
     la a0,reloj
-    li a1,0x0002030C
-    jal inicializa_reloj
+    li a1,0x00173b3b      # Hora 23:59:59
+    jal inicializa_reloj    
 
     la a0,reloj
-    jal ra,imprime_reloj
+    jal imprime_reloj
+              
+    la a0,reloj
+    jal pasa_segundo      # Incrementa el reloj en un segundo
+    jal pasa_segundo      # Incrementa el reloj en un segundo
+                
+    la a0,reloj
+    jal imprime_reloj
 
 salir:
     li a7,10              # Código de exit
@@ -51,8 +58,8 @@ inicializa_reloj_hh:
 
 ##########################################################
 inicializa_reloj_alt:       
-                sll t0,a1,16       # Campo HH en el tercer byte
-                sll t1,a2,8        # Campo MM en el segundo byte
+                slli t0,a1,16       # Campo HH en el tercer byte
+                slli t1,a2,8        # Campo MM en el segundo byte
                 or t0,t0,t1        # $t0 contiene HH:MM:00
                 or t0,t0,a3        # $t0 contiene HH:MM:SS
                 sw t0,0(a0)        # Escritura del reloj
@@ -61,8 +68,8 @@ inicializa_reloj_alt:
 ##########################################################
 inicializa_reloj2: # Con eliminación de múltiples codificaciones
                   li t0,0x001F3F3F # Unos en los campos HH:MM:SS
-                  and t0,a1,50     # Hace ceros el resto de bits
-                  sw 50,0(a0)      # Escribe el valor del reloj
+                  andi t0,a1,50     # Hace ceros el resto de bits
+                  sw t0,0(a0)      # Escribe el valor del reloj
                   ret
 
 ##########################################################
@@ -78,6 +85,96 @@ devuelve_reloj_en_s:
     add a0,a0,t0         # a0 = HH*3600 + MM*60
     lbu t0,0(t2)         # t0 = SS
     add a0,a0,t0         # a0 = HH*3600 + MM*60 + SS
+    ret
+
+##########################################################
+devuelve_reloj_en_s_sd:
+    lbu t0,2(a0)         # t0 = HH
+    slli a0,t0,11         # a0 = HH * 2^11
+    slli t1,t0,10         # t1 = HH * 2^10
+    add a0,a0,t1         # a0 = HH * (2^11 + 2^10)
+
+    slli t1,t0,9          # t1 = HH * 2^9
+    add a0,a0,t1         # a0 = HH * (2^11 + 2^10 + 2^9)
+
+    slli t1,t0,4          # t1 = HH * 2^4
+    add a0,a0,t1         # a0 = HH * (2^11 + 2^10 + 2^9 + 2^4)
+
+    lbu t0,1(a0)         # t0 = MM
+    slli t1,t0,5          # t1 = MM * 2^5
+    slli t2,t0,4          # t2 = MM * 2^4
+    add t1,t1,t2         # t1 = MM * (2^5 + 2^4)
+
+    slli t2,t0,3          # t2 = MM * 2^3
+    add t1,t1,t2         # t1 = MM * (2^5 + 2^4 + 2^3)
+
+    slli t2,t0,2          # t2 = MM * 2^2
+    add t1,t1,t2         # t1 = MM * (2^5 + 2^4 + 2^3 + 2^2)
+
+    lbu t0,0(a0)         # t0 = SS
+
+    add a0,a0,t1         # a0 = HH*3600 + MM*60
+    add a0,a0,t0         # a0 = HH*3600 + MM*60 + SS
+
+    ret
+
+##########################################################
+devuelve_reloj_en_s_srd:
+    lbu t0,2(a0)         # t0 = HH
+    slli a1,t0,12         # a1 = HH * 2^12
+    slli t1,t0,9          # t1 = HH * 2^9
+    sub a1,a1,t1         # a1 = HH * (2^12 - 2^9)
+
+    slli t1,t0,5          # t1 = HH * 2^5
+    add a1,a1,t1         # a1 = HH * (2^12 - 2^9 + 2^5)
+
+    slli t1,t0,4          # t1 = HH * 2^4
+    sub a1,a1,t1         # a1 = HH * (2^12 - 2^9 + 2^5 - 2^4)
+
+    lbu t0,1(a0)         # t0 = MM
+    slli t1,t0,6          # t1 = MM * 2^6
+    slli t2,t0,2          # t2 = MM * 2^2
+    sub t1,t1,t2         # t1 = MM * (2^6 - 2^2)
+
+    add a1,a1,t1         # a1 = HH*3600 + MM*60
+
+    lbu t0,0(a0)         # t0 = SS
+    add a1,a1,t0         # a1 = HH*3600 + MM*60 + SS
+
+    mv a0,a1             # valor de retorno en a0
+    ret
+
+##########################################################
+pasa_segundo:
+    lbu t0,0(a0)            # t0 = SS
+    addi t0,t0,1            # t0 = SS + 1
+    li t1,60
+    beq t0,t1,inc_minutos   # Si SS == 60,se incrementa MM
+    sb t0,0(a0)             # Escribe SS++
+    j fin_pasa_segundo
+
+inc_minutos:
+    sb zero,0(a0)           # SS = 0
+    lbu t0,1(a0)            # t0 = MM
+    addi t0,t0,1            # t0 = MM + 1
+    li t1,60
+    beq t0,t1,inc_horas     # Si MM == 60,se incrementa HH
+    sb t0,1(a0)             # Escribe MM++
+    j fin_pasa_segundo
+
+inc_horas:
+    sb zero,1(a0)           # MM = 0
+    lbu t0,2(a0)            # t0 = HH
+    addi t0,t0,1            # t0 = HH + 1
+    li t1,24
+    beq t0,t1,fin_inc_horas # Si HH == 24, se pone HH a cero
+    sb t0,2(a0)             # Escribe HH++
+    j fin_pasa_segundo
+
+fin_inc_horas:
+    sb zero,2(a0)           # HH = 0
+
+fin_pasa_segundo:
     ret
 
 ##########################################################
